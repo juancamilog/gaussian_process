@@ -5,6 +5,7 @@
 #include <random>
 #include <vector>
 #include <algorithm>
+//#include "mgl2/mgl.h"
 
 std::random_device rd;
 std::mt19937 gen(rd());
@@ -31,7 +32,7 @@ int main()
       }
     } 
     //std::cout<< f<<endl;
-    int n_train = 1000;
+    int n_train = 500;
     int n = f.size();
     // pick n_train samples from f
     std::shuffle(f.begin(),f.end(),gen);
@@ -48,7 +49,7 @@ int main()
     GP.set_SE_kernel();
     std::cout.precision(4);
 
-    GP.optimize_kernel_parameters(1,1e-10);
+    GP.optimize_kernel_parameters(1,1e-12);
     // compare actual values with prediction
     double variance;
     VectorXd mean;
@@ -63,9 +64,4 @@ int main()
     } 
     std::cout<<"n="<<n<<", n_train="<<n_train<<std::endl;
     double a = std::numeric_limits<double>::infinity()*(-1);
-
-    std::cout<<a<<std::endl;
-    std::cout<<a*(-0.5)<<std::endl;
-    std::cout<<1/a<<std::endl;
-
- }
+}
