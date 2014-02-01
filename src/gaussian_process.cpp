@@ -22,11 +22,10 @@ void gaussian_process::init(const alglib::real_1d_array &x, double observation_n
     llt_of_K = LLT<MatrixXd,Lower>(K);
     Kinv = llt_of_K.solve(MatrixXd::Identity(n,n));
     KY = llt_of_K.solve(Y);
-    log_det_K = 1;
+    log_det_K = 0;
     for (int i =0; i < n ; i++){
-        log_det_K *=  (llt_of_K.matrixL())(i,i)*(llt_of_K.matrixL())(i,i);
+        log_det_K +=  std::log((llt_of_K.matrixL())(i,i)*(llt_of_K.matrixL())(i,i));
     }
-    log_det_K = std::log(std::abs(log_det_K));
     normalization_const = 0.5*n*std::log(2*PI);
 }
 
@@ -98,7 +97,7 @@ double gaussian_process::log_marginal_likelihood(){
 }
 
 // search for the maximum likelihood parameters of the kernel
-void gaussian_process::optimize_kernel_parameters(double step_size, double stopping_criterion){
+void gaussian_process::optimize_kernel_parameters(double step_size, double stopping_criterion, int solver){
     int d = kernel.parameters.length();
 
     std::cout<<"kernel params before optimization\t";
@@ -114,12 +113,20 @@ void gaussian_process::optimize_kernel_parameters(double step_size, double stopp
     double epsg = stopping_criterion;
     double epsf = 0;
     double epsx = 0;
-    alglib::ae_int_t maxits = 1000;
-    alglib::minlbfgsreport rep;
-    alglib::minlbfgscreate(4, kernel.parameters, kernel.state);
-    alglib::minlbfgssetcond(kernel.state, epsg, epsf, epsx, maxits);
-    alglib::minlbfgsoptimize2(kernel.state, kernel.gradient);
-    alglib::minlbfgsresults(kernel.state, kernel.parameters, rep);
+    alglib::ae_int_t maxits = 100;
+    if (solver == 0){
+        alglib::minlbfgsreport rep;
+        alglib::minlbfgscreate(4,kernel.parameters, kernel.bfgsstate);
+        alglib::minlbfgssetcond(kernel.bfgsstate, epsg, epsf, epsx, maxits);
+        alglib::minlbfgsoptimize2(kernel.bfgsstate, kernel.gradient);
+        alglib::minlbfgsresults(kernel.bfgsstate, kernel.parameters, rep);
+    } else {
+        alglib::mincgreport rep;
+        alglib::mincgcreate(kernel.parameters, kernel.cgstate);
+        alglib::mincgsetcond(kernel.cgstate, epsg, epsf, epsx, maxits);
+        alglib::mincgoptimize2(kernel.cgstate, kernel.gradient);
+        alglib::mincgresults(kernel.cgstate, kernel.parameters, rep);
+    }
 
     std::cout<<"kernel params after optimization\t";
     for(int i=0; i<d; i++){ 
@@ -171,7 +178,7 @@ void gaussian_process::set_SE_kernel(){
             for(int i=0; i<param_d; i++){ 
                std::cout<<" "<<this->kernel.best_parameters[i];
             }
-            std::cout<<", value: "<<this->kernel.best_log_l<<std::endl;
+            std::cout<<", log likelihood: "<<-this->kernel.best_log_l<<std::endl;
         }
         // compute (-(K^{-1}*y)*(K^{-1}*y)^T- K^{-1})^{T}
         MatrixXd K_a = this->llt_of_K.solve(Y);
@@ -196,17 +203,27 @@ void gaussian_process::set_SE_kernel(){
                 exp_ij = std::exp(-0.5*dist);
 
                 // first accumulate the gradient for sigma_f^2
-                grad(0) = K_a(j,i);(  two_sigma_f*exp_ij );
+                grad(0) += K_a(j,i)*( two_sigma_f*exp_ij );
 
                 // the accumulate the gradient for the length scales
                 for ( int k=0; k<d; k++){
-                    grad(k+1) = K_a(j,i)*( minus_half_sigma_f_sq*(x_i[k]-x_j[k])*(x_i[k]-x_j[k])*exp_ij );
+                    grad(k+1) += K_a(j,i)*( minus_half_sigma_f_sq*(x_i[k]-x_j[k])*(x_i[k]-x_j[k])*exp_ij );
                 }
 
                 // finally accumulate the gradient for the noise parameter
-                grad(d+1) = K_a(j,i)*( (i==j)?two_sigma_n:0 );
+                grad(d+1) += K_a(j,i)*( (i==j)?two_sigma_n:0 );
             }
         }
+        std::cout<<"x: ";
+            for(int i=0; i<param_d; i++){ 
+               std::cout<<" "<<x(i);
+            }
+        std::cout<<std::endl;
+        std::cout<<"gradient: ";
+            for(int i=0; i<param_d; i++){ 
+               std::cout<<" "<<grad(i);
+            }
+        std::cout<<std::endl;
     };
 
     kernel.function = se_kernel;

@@ -33,7 +33,8 @@ class kernel_object{
         alglib::real_1d_array best_parameters;
         double best_observation_noise;
 
-        alglib::minlbfgsstate state;
+        alglib::minlbfgsstate bfgsstate;
+        alglib::mincgstate cgstate;
 };
 
 class gaussian_process{
@@ -46,7 +47,7 @@ class gaussian_process{
         VectorXd compute_marginal_covariance(VectorXd &x);
         double log_marginal_likelihood();
         void prediction(VectorXd &x, VectorXd &mean, double &variance);
-        void optimize_kernel_parameters(double step_size=1e-5, double stopping_criterion=1e-7);
+        void optimize_kernel_parameters(double step_size=1e-5, double stopping_criterion=1e-7,int solver = 0);
 
         /* square exponential (RBF) kernel */
         void set_SE_kernel();

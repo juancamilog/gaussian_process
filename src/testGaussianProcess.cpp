@@ -14,18 +14,18 @@ typedef std::pair<VectorXd,double> data_point;
 
 double sine(double x, double y, double observation_noise=0){
     std::normal_distribution<double> dist(0,observation_noise);
-    return std::sin(x+y) + dist(gen);
+    return 10.0*std::sin((-(x-1)*(x-1)-y*y/400)/100) + dist(gen);
 };
 
 
 int main()
 {
-    double step_size = 0.01;
-    double noise = 0.2;
+    double step_size = 0.1;
+    double noise = 1.0;
     std::vector<data_point> f;
     // this is our data
-    for (double x0 = 0.1; x0<10; x0=x0+step_size){
-      for (double x1 = 0.1; x1<10; x1=x1+step_size){
+    for (double x0 = -10; x0<10; x0=x0+step_size){
+      for (double x1 = -10; x1<10; x1=x1+step_size){
           VectorXd xp(2);
           xp(0)=x0; xp(1)=x1;
           f.push_back(data_point(xp,sine(x0,x1,noise)));
@@ -47,9 +47,9 @@ int main()
     
     gaussian_process GP(X,Y);
     GP.set_SE_kernel();
-    std::cout.precision(4);
+    std::cout.precision(12);
 
-    GP.optimize_kernel_parameters(1,1e-12);
+    GP.optimize_kernel_parameters(1,1e-12,1);
     // compare actual values with prediction
     double variance;
     VectorXd mean;
@@ -63,5 +63,4 @@ int main()
                  <<",\tvar(x): "<<variance<<std::endl;
     } 
     std::cout<<"n="<<n<<", n_train="<<n_train<<std::endl;
-    double a = std::numeric_limits<double>::infinity()*(-1);
 }
