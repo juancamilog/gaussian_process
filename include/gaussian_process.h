@@ -50,6 +50,7 @@ class gaussian_process{
         double get_maximum_variance();
         double compute_maximum_variance();
         int dataset_size();
+        int input_dimensions();
 
         VectorXd kernel_vector(VectorXd &x);
         MatrixXd kernel_matrix(MatrixXd &X, bool noise_free=false);

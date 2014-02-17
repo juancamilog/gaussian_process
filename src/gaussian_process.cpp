@@ -2,7 +2,6 @@
 
 // empty constructor
 gaussian_process::gaussian_process(){
-    set_SE_kernel();
     maximum_variance=0;
 }
 
@@ -46,6 +45,10 @@ void gaussian_process::add_sample(VectorXd &x, double value){
 
 int gaussian_process::dataset_size(){
     return X.cols();
+}
+
+int gaussian_process::input_dimensions(){
+    return X.rows();
 }
 
 double gaussian_process::get_maximum_variance(){
