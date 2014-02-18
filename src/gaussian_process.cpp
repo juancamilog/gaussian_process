@@ -34,6 +34,8 @@ void gaussian_process::init(const alglib::real_1d_array &x, double observation_n
 void gaussian_process::add_sample(VectorXd &x, double value){
     if (X.cols()==0){
        X = x;
+       Y = VectorXd(1);
+       Y[0]= value;
     }
     else{
        X.conservativeResize(X.rows(),X.cols()+1);
