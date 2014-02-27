@@ -1,15 +1,16 @@
 #include "gaussian_process.h"
 
 // empty constructor
-gaussian_process::gaussian_process(){
+gaussian_process::gaussian_process(int input_dimensions){
     maximum_variance=0;
+    set_SE_kernel(input_dimensions);
 }
 
 // constructor with dataset
 gaussian_process::gaussian_process(MatrixXd &Xin, MatrixXd &Yin){
     X = Xin;
     Y = Yin;
-    set_SE_kernel();
+    set_SE_kernel(X.rows());
     maximum_variance=0;
 }
 
@@ -223,7 +224,7 @@ void gaussian_process::optimize_parameters(double stopping_criterion, int solver
 
 
 //================================== kernel functions ===================================//
-void gaussian_process::set_SE_kernel(){
+void gaussian_process::set_SE_kernel(int input_dimensions){
     // parameters correspond to (sigma_f^2, 1/(2*l_1), ... , 1/(2*l_d), sigma_n^2)
     // kernel function for evaluations
     std::function<kernel_func> se_kernel = [this](VectorXd x_i, VectorXd &x_j, const alglib::real_1d_array &parameters){
@@ -340,16 +341,15 @@ void gaussian_process::set_SE_kernel(){
     kernel.function_alglib = se_func;
     kernel.gradient = se_gradient;
 
-    int d = X.rows();
     // number of parameters is d+2
     alglib::real_1d_array parameters;
-    parameters.setlength(d+2);
+    parameters.setlength(input_dimensions+2);
     for (int i=0; i<parameters.length(); i++){
         parameters(i) = 1.0;
     }
     
     kernel.best_parameters = alglib::real_1d_array(parameters);
-    init(parameters,parameters(d+1));
+    init(parameters,parameters(input_dimensions+1));
 }
 
 //==================================== kernel object =====================================//

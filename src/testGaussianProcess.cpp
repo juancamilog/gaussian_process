@@ -77,7 +77,8 @@ int main(int argc, char* argv[])
     
     gaussian_process GP(X,Y);
 
-    GP.set_SE_kernel();
+    GP.set_SE_kernel(X.rows());
+
     std::cout.precision(10);
 
     std::chrono::time_point<std::chrono::system_clock> start,end; 

@@ -41,7 +41,7 @@ class kernel_object{
 
 class gaussian_process{
     public:
-        gaussian_process();
+        gaussian_process(int input_dimensions);
         gaussian_process(MatrixXd &Xin, MatrixXd &Yin);
         gaussian_process(MatrixXd &Xin, VectorXd &Yin);
         void init(const alglib::real_1d_array &x, double observation_noise, bool noise_free=false);
@@ -62,7 +62,7 @@ class gaussian_process{
         void optimize_parameters(double stopping_criterion=1e-7,int solver = 0);
 
         /* square exponential (RBF) kernel */
-        void set_SE_kernel();
+        void set_SE_kernel(int input_dimensions);
 
         /*
         void set_matern_kernel();
