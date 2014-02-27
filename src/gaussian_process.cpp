@@ -1,6 +1,10 @@
 #include "gaussian_process.h"
 
 // empty constructor
+gaussian_process::gaussian_process(){
+    maximum_variance=0;
+}
+
 gaussian_process::gaussian_process(int input_dimensions){
     maximum_variance=0;
     set_SE_kernel(input_dimensions);

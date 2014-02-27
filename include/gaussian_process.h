@@ -41,6 +41,7 @@ class kernel_object{
 
 class gaussian_process{
     public:
+        gaussian_process();
         gaussian_process(int input_dimensions);
         gaussian_process(MatrixXd &Xin, MatrixXd &Yin);
         gaussian_process(MatrixXd &Xin, VectorXd &Yin);
