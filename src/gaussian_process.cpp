@@ -2,6 +2,7 @@
 
 // empty constructor
 gaussian_process::gaussian_process(){
+    std::cout<<"CALLED THE EMPTY CONSTRUCTOR"<<std::endl;
     maximum_variance=0;
 }
 
@@ -20,8 +21,8 @@ gaussian_process::gaussian_process(MatrixXd &Xin, MatrixXd &Yin){
 
 // precomputations
 void gaussian_process::init(const alglib::real_1d_array &x, double observation_noise, bool noise_free){
-    kernel.parameters = alglib::real_1d_array(x);
-    kernel.observation_noise = observation_noise;
+    kernel->parameters = alglib::real_1d_array(x);
+    kernel->observation_noise = observation_noise;
 
     int n = X.cols();
     // kernel matrix ( !noise_free => K= K_noise_free + sigma_n*I
@@ -87,7 +88,7 @@ VectorXd gaussian_process::kernel_vector(VectorXd &x){
     VectorXd x_i;
     for(int i=0; i<n; i++){
         x_i = X.col(i);
-        kx[i]=kernel.function(x_i,x,kernel.parameters);
+        kx[i]=kernel->function(x_i,x,kernel->parameters);
     }
     return kx;
 }
@@ -102,10 +103,10 @@ MatrixXd gaussian_process::kernel_matrix(MatrixXd &X, bool noise_free){
         for (int i=j; i<n ; i++){
             x_i = X.col(i);
             x_j = X.col(j);
-            K(i,j) = kernel.function(x_i,x_j,kernel.parameters);
+            K(i,j) = kernel->function(x_i,x_j,kernel->parameters);
             if (i==j){
                 if(!noise_free){
-                    K(i,j) += kernel.observation_noise*kernel.observation_noise;
+                    K(i,j) += kernel->observation_noise*kernel->observation_noise;
                 }
             }else{
                 K(j,i) = K(i,j);
@@ -123,7 +124,7 @@ void gaussian_process::prediction(VectorXd &x, VectorXd &mean, double &variance)
     mean = kx.transpose()*KY;
     // compute variance estimate
     VectorXd v = llt_of_K.matrixL().solve(kx);
-    variance = kernel.function(x,x,kernel.parameters) - v.dot(v);
+    variance = kernel->function(x,x,kernel->parameters) - v.dot(v);
 }
 
 // compute the log marginal likelihood of the function values Y, given the inputs X and the kernel parameters
@@ -132,8 +133,8 @@ double gaussian_process::log_marginal_likelihood(){
     double complexity_penalty = 0.5*log_det_K;
     if (std::isnan(model_fit_error+complexity_penalty)||std::isinf(model_fit_error+complexity_penalty)){
         std::cout<<"x: ";
-        for(int i=0; i<kernel.parameters.length(); i++){ 
-           std::cout<<" "<<kernel.parameters(i);
+        for(int i=0; i<kernel->parameters.length(); i++){ 
+           std::cout<<" "<<kernel->parameters(i);
         }
         std::cout<<" K: \n"<<K<<std::endl;
         std::cout<<" Kinv: \n"<<Kinv<<std::endl;
@@ -147,24 +148,24 @@ double gaussian_process::log_marginal_likelihood(){
 
 //select random staring point
 void gaussian_process::set_opt_starting_point(VectorXd point){
-    int d = kernel.parameters.length();
+    int d = kernel->parameters.length();
     for(int i=0; i<d; i++){ 
-       kernel.parameters[i] = point[i];
+       kernel->parameters[i] = point[i];
     }
 }
 
 // search for the maximum likelihood parameters of the kernel
 void gaussian_process::optimize_parameters(double stopping_criterion, int solver){
-    int d = kernel.parameters.length();
+    int d = kernel->parameters.length();
 
     std::cout<<"Kernel parameters before optimization\t";
     for(int i=0; i<d; i++){ 
-       std::cout<<" "<<kernel.parameters[i];
+       std::cout<<" "<<kernel->parameters[i];
     }
     std::cout<<std::endl;
 
-    kernel.best_log_l = std::numeric_limits<float>::max();
-    kernel.iters = 0;
+    kernel->best_log_l = std::numeric_limits<float>::max();
+    kernel->iters = 0;
 
     double epsg = stopping_criterion;
     double epsf = 0;
@@ -174,18 +175,18 @@ void gaussian_process::optimize_parameters(double stopping_criterion, int solver
         if (solver == 0){
             std::cout<<"Optimizing with the L-BFGS algorithm"<<std::endl;
             alglib::minlbfgsreport rep;
-            alglib::minlbfgscreate(4,kernel.parameters, kernel.bfgsstate);
-            alglib::minlbfgssetcond(kernel.bfgsstate, epsg, epsf, epsx, maxits);
-            alglib::minlbfgsoptimize2(kernel.bfgsstate, kernel.gradient);
-            alglib::minlbfgsresults(kernel.bfgsstate, kernel.parameters, rep);
+            alglib::minlbfgscreate(4,kernel->parameters, kernel->bfgsstate);
+            alglib::minlbfgssetcond(kernel->bfgsstate, epsg, epsf, epsx, maxits);
+            alglib::minlbfgsoptimize2(kernel->bfgsstate, kernel->gradient);
+            alglib::minlbfgsresults(kernel->bfgsstate, kernel->parameters, rep);
             std::cout<<"Iterations: "<<rep.iterationscount<<", Function Evaluations: "<<rep.nfev<<", VarIdx: "<<rep.varidx<<", Termination Type: "<<rep.terminationtype<<std::endl;
         }else if (solver == 1){
             std::cout<<"Optimizing with the L-BFGS algorithm (with numerical differentiation)"<<std::endl;
             alglib::minlbfgsreport rep;
-            alglib::minlbfgscreatef(4,kernel.parameters,1e-5, kernel.bfgsstate);
-            alglib::minlbfgssetcond(kernel.bfgsstate, epsg, epsf, epsx, maxits);
-            alglib::minlbfgsoptimize2(kernel.bfgsstate, kernel.function_alglib);
-            alglib::minlbfgsresults(kernel.bfgsstate, kernel.parameters, rep);
+            alglib::minlbfgscreatef(4,kernel->parameters,1e-5, kernel->bfgsstate);
+            alglib::minlbfgssetcond(kernel->bfgsstate, epsg, epsf, epsx, maxits);
+            alglib::minlbfgsoptimize2(kernel->bfgsstate, kernel->function_alglib);
+            alglib::minlbfgsresults(kernel->bfgsstate, kernel->parameters, rep);
             std::cout<<"Iterations: "<<rep.iterationscount<<", Function Evaluations: "<<rep.nfev<<", VarIdx: "<<rep.varidx<<", Termination Type: "<<rep.terminationtype<<std::endl;
         }else if (solver == 2){
             std::cout<<"Optimizing with constrained CG algorithm"<<std::endl;
@@ -197,19 +198,19 @@ void gaussian_process::optimize_parameters(double stopping_criterion, int solver
                 ubound[i] = 1e3;
             }
             alglib::minbleicreport rep;
-            alglib::minbleiccreate(kernel.parameters, kernel.bleicstate);
-            alglib::minbleicsetbc(kernel.bleicstate,lbound,ubound);
-            alglib::minbleicsetcond(kernel.bleicstate, epsg, epsf, epsx, maxits);
-            alglib::minbleicoptimize2(kernel.bleicstate, kernel.gradient);
-            alglib::minbleicresults(kernel.bleicstate, kernel.parameters, rep);
+            alglib::minbleiccreate(kernel->parameters, kernel->bleicstate);
+            alglib::minbleicsetbc(kernel->bleicstate,lbound,ubound);
+            alglib::minbleicsetcond(kernel->bleicstate, epsg, epsf, epsx, maxits);
+            alglib::minbleicoptimize2(kernel->bleicstate, kernel->gradient);
+            alglib::minbleicresults(kernel->bleicstate, kernel->parameters, rep);
             std::cout<<"Iterations: "<<rep.iterationscount<<", Function Evaluations: "<<rep.nfev<<", VarIdx: "<<rep.varidx<<", Termination Type: "<<rep.terminationtype<<std::endl;
         } else {
             std::cout<<"Optimizing with the CG algorithm"<<std::endl;
             alglib::mincgreport rep;
-            alglib::mincgcreate(kernel.parameters, kernel.cgstate);
-            alglib::mincgsetcond(kernel.cgstate, epsg, epsf, epsx, maxits);
-            alglib::mincgoptimize2(kernel.cgstate, kernel.gradient);
-            alglib::mincgresults(kernel.cgstate, kernel.parameters, rep);
+            alglib::mincgcreate(kernel->parameters, kernel->cgstate);
+            alglib::mincgsetcond(kernel->cgstate, epsg, epsf, epsx, maxits);
+            alglib::mincgoptimize2(kernel->cgstate, kernel->gradient);
+            alglib::mincgresults(kernel->cgstate, kernel->parameters, rep);
             std::cout<<"Iterations: "<<rep.iterationscount<<", Function Evaluations: "<<rep.nfev<<", VarIdx: "<<rep.varidx<<", Termination Type: "<<rep.terminationtype<<std::endl;
         }
     } catch (alglib::ap_error e){
@@ -217,11 +218,11 @@ void gaussian_process::optimize_parameters(double stopping_criterion, int solver
     }
     std::cout<<"kernel params after optimization\t";
     for(int i=0; i<d; i++){ 
-       std::cout<<" "<<kernel.best_parameters[i];
-       kernel.parameters[i] = kernel.best_parameters[i];
+       std::cout<<" "<<kernel->best_parameters[i];
+       kernel->parameters[i] = kernel->best_parameters[i];
     }
-    kernel.observation_noise = kernel.best_observation_noise;
-    init(kernel.parameters,kernel.observation_noise);
+    kernel->observation_noise = kernel->best_observation_noise;
+    init(kernel->parameters,kernel->observation_noise);
     std::cout<<std::endl;
     std::cout<<"likelihood: \t"<<log_marginal_likelihood()<<std::endl;
 }
@@ -246,12 +247,12 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
         int d = this->X.rows();
         // update K and Kinv
         this->init(params, params(d+1));
-        this->kernel.iters++;
+        this->kernel->iters++;
         func = -this->log_marginal_likelihood();
-        if (!std::isinf(func) && func<=this->kernel.best_log_l){
-            this->kernel.best_parameters = alglib::real_1d_array(params);
-            this->kernel.best_log_l = func;
-            this->kernel.best_observation_noise= params(d+1);
+        if (!std::isinf(func) && func<=this->kernel->best_log_l){
+            this->kernel->best_parameters = alglib::real_1d_array(params);
+            this->kernel->best_log_l = func;
+            this->kernel->best_observation_noise= params(d+1);
         }
     };
 
@@ -267,17 +268,18 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
         double minus_half_sigma_f_sq = (-0.5*params(0)*params(0));
         double exp_ij;
         VectorXd x_i,x_j;
+
         // update K and Kinv
         this->init(params, params(d+1));
-        this->kernel.iters++;
+        this->kernel->iters++;
         //compute negative log likelihood
         func = -this->log_marginal_likelihood();
 
         //check if this is the best set of parameters we have obtained so far
-        if (!std::isinf(func) && func<=this->kernel.best_log_l){
-            this->kernel.best_parameters = alglib::real_1d_array(params);
-            this->kernel.best_log_l = func;
-            this->kernel.best_observation_noise= params(d+1);
+        if (!std::isinf(func) && func<=this->kernel->best_log_l){
+            this->kernel->best_parameters = alglib::real_1d_array(params);
+            this->kernel->best_log_l = func;
+            this->kernel->best_observation_noise= params(d+1);
         }
 
         // compute (-(K^{-1}*y)*(K^{-1}*y)^T- K^{-1})^{T}
@@ -332,6 +334,7 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
                std::cout<<" "<<grad(i);
             }
         std::cout<<std::endl;
+        
         std::cout<<" K: \n"<<this->K<<std::endl;
         std::cout<<" Kinv: \n"<<this->Kinv<<std::endl;
         std::cout<<" Ka: \n"<<K_a<<std::endl;
@@ -340,10 +343,7 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
         std::cout<<" KY: \n"<<this->KY.transpose()<<std::endl;
         */
     };
-
-    kernel.function = se_kernel;
-    kernel.function_alglib = se_func;
-    kernel.gradient = se_gradient;
+    kernel = new kernel_object(se_kernel, se_gradient, se_func);
 
     // number of parameters is d+2
     alglib::real_1d_array parameters;
@@ -352,7 +352,8 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
         parameters(i) = 1.0;
     }
     
-    kernel.best_parameters = alglib::real_1d_array(parameters);
+    kernel->best_parameters = alglib::real_1d_array(parameters);
+    kernel->best_log_l = log_marginal_likelihood();
     init(parameters,parameters(input_dimensions+1));
 }
 
@@ -364,7 +365,8 @@ kernel_object::kernel_object( ){
 
 kernel_object::kernel_object(std::function<kernel_func> &k,
                 std::function<gradient_func> &g,
-                int n_params){
+                std::function<kernel_func_alglib> &f){
     function = k;
+    function_alglib = f;
     gradient = g;
 }

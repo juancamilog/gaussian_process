@@ -20,7 +20,7 @@ class kernel_object{
         kernel_object();
         kernel_object(std::function<kernel_func> &k,
                 std::function<gradient_func> &g,
-                int n_params);
+                std::function<kernel_func_alglib> &f);
 
         std::function<kernel_func> function;
         std::function<gradient_func> gradient;
@@ -72,7 +72,7 @@ class gaussian_process{
         void set_pp_kernel();
         void set_dot_product_kernel();*/
 
-        kernel_object kernel;
+        kernel_object* kernel;
 
     private:
         MatrixXd K;

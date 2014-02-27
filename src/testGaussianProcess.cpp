@@ -19,7 +19,7 @@ typedef std::pair<VectorXd,double> data_point;
 
 double func(double x, double y, double observation_noise=0){
     std::normal_distribution<double> dist(0,observation_noise);
-    return 100*std::exp(-0.5*(x*x+y*y))  + 500*std::exp(-0.5*((x-3)*(x-3)+(y-4)*(y-4))) + dist(gen);
+    return 5*std::exp(-0.05*(x*x+y*y))  + 5*std::exp(-0.025*((x-3)*(x-3)+(y-4)*(y-4))) + dist(gen);
 };
 
 
@@ -79,7 +79,7 @@ int main(int argc, char* argv[])
 
     GP.set_SE_kernel(X.rows());
 
-    std::cout.precision(10);
+    std::cout.precision(5);
 
     std::chrono::time_point<std::chrono::system_clock> start,end; 
     std::chrono::duration<double> secs;
