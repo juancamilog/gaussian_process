@@ -2,9 +2,9 @@
 #include <iostream>
 #include <Eigen/Dense>
 #include <gaussian_process.h>
-#include <random>
 #include <vector>
 #include <algorithm>
+#include <random>
 #include <chrono>
 //#include "mgl2/mgl.h"
 
@@ -19,7 +19,7 @@ typedef std::pair<VectorXd,double> data_point;
 
 double func(double x, double y, double observation_noise=0){
     std::normal_distribution<double> dist(0,observation_noise);
-    return 5*std::exp(-0.05*(x*x+y*y))  + 5*std::exp(-0.025*((x-3)*(x-3)+(y-4)*(y-4))) + dist(gen);
+    return 255*(0.8*std::exp(-0.5*(x*x+y*y))  + 0.2*std::sin(0.25*(x+y))) + dist(gen);
 };
 
 
@@ -76,6 +76,7 @@ int main(int argc, char* argv[])
     } 
     
     gaussian_process GP(X,Y);
+    GP.set_debug_print(true);
 
     GP.set_SE_kernel(X.rows());
 
@@ -85,10 +86,10 @@ int main(int argc, char* argv[])
     std::chrono::duration<double> secs;
 
     start = std::chrono::system_clock::now();
-    std::srand(std::time(0));
-    Vector4d init_params = VectorXd::Random(4).cwiseAbs()*10;
-    GP.set_opt_starting_point(init_params);
-    GP.optimize_parameters(1e-12,optimization_algorithm);
+    //Vector4d init_params = VectorXd::Random(4).cwiseAbs()*10;
+    //GP.set_opt_starting_point(init_params);
+    std::srand(std::time(NULL));
+    GP.optimize_parameters_random_restarts(1e-9,optimization_algorithm, 10,50,50);
 
     end = std::chrono::system_clock::now();
 
@@ -98,14 +99,14 @@ int main(int argc, char* argv[])
     // compare actual values with prediction
     double variance;
     VectorXd mean;
-    for (int i = n_train; i<n_train+20; i++){
+    for (int i = n_train; i<n_train+100; i++){
         VectorXd x = f[i].first;
         GP.prediction(x,mean,variance);
         std::cout<<std::fixed
                  <<"x: "<<x.transpose()
                  <<",\tf(x): "<<func(x[0], x[1])
                  <<",\tf*(x): "<<mean.transpose()
-                 <<",\tvar(x): "<<variance<<std::endl;
+                 <<",\tstd(x): "<<std::sqrt(variance)<<std::endl;
     } 
     std::cout<<"n="<<n<<", n_train="<<n_train<<std::endl;
 
@@ -120,5 +121,5 @@ int main(int argc, char* argv[])
              <<"x: "<<xp.transpose()
              <<",\tf(x): "<<func(xp[0], xp[1])
              <<",\tf*(x): "<<mean.transpose()
-             <<",\tvar(x): "<<variance<<std::endl;
+             <<",\tstd(x): "<<std::sqrt(variance)<<std::endl;
 }

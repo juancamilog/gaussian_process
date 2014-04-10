@@ -6,6 +6,8 @@
 #include "optimization.h"
 #include<limits>
 #include<execinfo.h>
+#include <random>
+#include <chrono>
 
 #define PI 3.14159265358979
 
@@ -19,6 +21,10 @@ class kernel_object{
     public:
         kernel_object();
         kernel_object(std::function<kernel_func> &k,
+                std::function<gradient_func> &g,
+                std::function<kernel_func_alglib> &f);
+
+        void init(std::function<kernel_func> &k,
                 std::function<gradient_func> &g,
                 std::function<kernel_func_alglib> &f);
 
@@ -45,7 +51,8 @@ class gaussian_process{
         gaussian_process(int input_dimensions);
         gaussian_process(MatrixXd &Xin, MatrixXd &Yin);
         gaussian_process(MatrixXd &Xin, VectorXd &Yin);
-        void init(const alglib::real_1d_array &x, double observation_noise, bool noise_free=false);
+        void init(const alglib::real_1d_array x, double observation_noise, bool noise_free=false);
+        void init(const alglib::real_1d_array x);
 
         void add_sample(VectorXd &X, double value);
         double get_maximum_variance();
@@ -60,10 +67,14 @@ class gaussian_process{
         void prediction(VectorXd &x, VectorXd &mean, double &variance);
 
         void set_opt_starting_point(VectorXd point);
+        void set_opt_random_start(double scale=1.0, double offset = 0.0);
         void optimize_parameters(double stopping_criterion=1e-7,int solver = 0);
+        void optimize_parameters_random_restarts(double stopping_criterion=1e-7,int solver = 0, int restarts=2,double scale=1.0, double offset = 0.0);
 
         /* square exponential (RBF) kernel */
         void set_SE_kernel(int input_dimensions);
+
+        void set_debug_print(bool dbg_prnt);
 
         /*
         void set_matern_kernel();
@@ -85,4 +96,6 @@ class gaussian_process{
         MatrixXd X;
         VectorXd Y;
         MatrixXd KinvY;
+
+        bool debug_print;
 };
