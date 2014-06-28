@@ -239,7 +239,7 @@ void gaussian_process::optimize_parameters(double stopping_criterion, int solver
             ubound.setlength(d);
             for (int i=0; i<d; i++){
                 lbound[i] = 1e-9;
-                ubound[i] = 1e3;
+                ubound[i] = 1e9;
             }
             alglib::minbleicreport rep;
             alglib::minbleiccreate(kernel->parameters, kernel->bleicstate);
