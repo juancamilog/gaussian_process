@@ -4,12 +4,10 @@
 gaussian_process::gaussian_process(){
     debug_print=false;
     std::cout<<"CALLED THE EMPTY CONSTRUCTOR"<<std::endl;
-    maximum_variance=0;
 }
 
 gaussian_process::gaussian_process(int input_dimensions){
     debug_print=false;
-    maximum_variance=0;
     set_SE_kernel(input_dimensions);
 }
 
@@ -19,7 +17,6 @@ gaussian_process::gaussian_process(MatrixXd &Xin, MatrixXd &Yin){
     X = Xin;
     Y = Yin;
     set_SE_kernel(X.rows());
-    maximum_variance=0;
 }
 
 // precomputations
@@ -32,11 +29,13 @@ void gaussian_process::init(const alglib::real_1d_array x, double observation_no
     K = kernel_matrix(X,noise_free);
     llt_of_K = LLT<MatrixXd,Lower>(K);
     Kinv = llt_of_K.solve(MatrixXd::Identity(n,n));
-    KY = llt_of_K.solve(Y);
+    KinvY = llt_of_K.solve(Y);
     log_det_K = 0;
     for (int i =0; i < n ; i++){
-        log_det_K +=  std::log((llt_of_K.matrixL())(i,i)*(llt_of_K.matrixL())(i,i));
+        //log_det_K +=  std::log((llt_of_K.matrixL())(i,i)*(llt_of_K.matrixL())(i,i));
+        log_det_K +=  std::log((llt_of_K.matrixL())(i,i));
     }
+    log_det_K *= 2;
     normalization_const = 0.5*n*std::log(2*PI);
 }
 
@@ -57,6 +56,9 @@ void gaussian_process::add_sample(VectorXd &x, double value){
        Y.conservativeResize(Y.size()+1);
        Y(Y.size()-1) = value;
     }
+    // update the likelihood of the dataset given the best parameters found so far
+    kernel->best_log_l = log_marginal_likelihood();
+    init(kernel->parameters);
 }
 
 int gaussian_process::dataset_size(){
@@ -67,26 +69,33 @@ int gaussian_process::input_dimensions(){
     return X.rows();
 }
 
-double gaussian_process::get_maximum_variance(){
-    return maximum_variance;
-}
 
 // compute the maximum variance in the model predictions for samples in the dataset (should be close to 0 if noise is 0)
-double gaussian_process::compute_maximum_variance(){
+void gaussian_process::predictive_error_and_variance(VectorXd &error, VectorXd &variance, int type){
     int n = X.cols();
     VectorXd x_i;
-    VectorXd v;
-    VectorXd mean;
-    double variance;
 
-    for(int i=0; i<n; i++){
-        x_i = X.col(i);
-        prediction(x_i,mean,variance);
-        if (variance> maximum_variance){
-            maximum_variance = variance;
+    error.conservativeResize(n);
+    variance.conservativeResize(n);
+    std::cout<<"n: "<<n<<std::endl;
+    // compute the GP prediction with the full dataset. If the noise is 0, the error and the variance should be 0
+    if (type == 0){
+        VectorXd mean;
+        for(int i=0; i<n; i++){
+            x_i = X.col(i);
+            prediction(x_i,mean,variance(i));
+            error(i) =  (Y(i) - mean(0))*(Y(i) -mean(0));
         }
     }
-    return maximum_variance;
+    // compute the LOO GP prediction (i.e. for each datapoint, compute the prediction and variance of a GP that does not include the data point)
+    else if (type == 1){
+        double mean_i;
+        for(int i=0; i<n; i++){
+            mean_i = Y(i) - KinvY(i)/Kinv(i,i);
+            variance(i) = 1.0/Kinv(i,i);
+            error(i) =  (Y(i) - mean_i)*(Y(i) -mean_i);
+        }
+    }
 }
 
 // compute the covariance vector between a sample point x, and the samples in the dataset X
@@ -129,15 +138,17 @@ void gaussian_process::prediction(VectorXd &x, VectorXd &mean, double &variance)
     //compute the correlation vector for the input x
     VectorXd kx = kernel_vector(x);
     // compute predictive mean
-    mean = kx.transpose()*KY;
+    mean = kx.transpose()*KinvY;
     // compute variance estimate
     VectorXd v = llt_of_K.matrixL().solve(kx);
     variance = kernel->function(x,x,kernel->parameters) - v.dot(v);
+    if (variance < 0.0)
+        variance = 0.0;
 }
 
 // compute the log marginal likelihood of the function values Y, given the inputs X and the kernel parameters
 double gaussian_process::log_marginal_likelihood(){
-    double model_fit_error = 0.5*Y.dot(KY);
+    double model_fit_error = 0.5*Y.dot(KinvY);
     double complexity_penalty = 0.5*log_det_K;
     if ((std::isnan(model_fit_error+complexity_penalty)||std::isinf(model_fit_error+complexity_penalty)) && debug_print){
         std::cout<<"x: ";
@@ -149,12 +160,29 @@ double gaussian_process::log_marginal_likelihood(){
         std::cout<<" K: \n"<<K<<std::endl;
         std::cout<<" Kinv: \n"<<Kinv<<std::endl;
         std::cout<<" Y: \n"<<Y.transpose()<<std::endl;
-        std::cout<<" KY: \n"<<KY.transpose()<<std::endl;
+        std::cout<<" KinvY: \n"<<KinvY.transpose()<<std::endl;
         */
 
         std::cout<<"fit error: "<<model_fit_error<<" complexity penalty: "<<complexity_penalty<<" normalization constant: "<<normalization_const<<std::endl;
     }
     return -model_fit_error - complexity_penalty - normalization_const;
+}
+
+double gaussian_process::leave_one_out_log_probability(){
+    double loo_log_probability = 0;
+    int n = X.cols();
+    double mean_i;
+    double variance_i;
+
+    for(int i=0; i<n; i++){
+        mean_i = Y(i) - KinvY(i)/Kinv(i,i);
+        variance_i = 1/Kinv(i,i);
+        loo_log_probability += -std::log(variance_i) - (Y(i) - mean_i)*(Y(i) - mean_i)/variance_i;
+    }
+    loo_log_probability *= 0.5;
+    loo_log_probability -= normalization_const;
+    return loo_log_probability;
+
 }
 
 //select random staring point
@@ -178,7 +206,7 @@ void gaussian_process::optimize_parameters(double stopping_criterion, int solver
     // make sure that we have the correct value of the likelihood function for the current parameters
     /*alglib::real_1d_array tmp(kernel->parameters);
     init(kernel->best_parameters,kernel->best_parameters(d-1));
-    kernel->best_log_l = -this->log_marginal_likelihood();
+    kernel->best_log_l = this->log_marginal_likelihood();
     kernel->parameters = alglib::real_1d_array(tmp);*/
     //
 
@@ -188,7 +216,7 @@ void gaussian_process::optimize_parameters(double stopping_criterion, int solver
            std::cout<<" "<<kernel->best_parameters[i];
         }
         std::cout<<std::endl;
-        std::cout<<"likelihood: \t"<<-kernel->best_log_l<<std::endl;
+        std::cout<<"likelihood: \t"<<kernel->best_log_l<<std::endl;
 
         std::cout<<"Starting point: \t";
         for(int i=0; i<d; i++){ 
@@ -207,7 +235,7 @@ void gaussian_process::optimize_parameters(double stopping_criterion, int solver
             if (debug_print)
                 std::cout<<"\tOptimizing with the L-BFGS algorithm"<<std::endl;
             alglib::minlbfgsreport rep;
-            alglib::minlbfgscreate(4,kernel->parameters, kernel->bfgsstate);
+            alglib::minlbfgscreate(d,kernel->parameters, kernel->bfgsstate);
             alglib::minlbfgssetcond(kernel->bfgsstate, epsg, epsf, epsx, maxits);
             alglib::minlbfgsoptimize2(kernel->bfgsstate, kernel->gradient);
             alglib::minlbfgsresults(kernel->bfgsstate, kernel->parameters, rep);
@@ -221,7 +249,7 @@ void gaussian_process::optimize_parameters(double stopping_criterion, int solver
             if (debug_print)
                 std::cout<<"\tOptimizing with the L-BFGS algorithm (with numerical differentiation)"<<std::endl;
             alglib::minlbfgsreport rep;
-            alglib::minlbfgscreatef(4,kernel->parameters,1e-5, kernel->bfgsstate);
+            alglib::minlbfgscreatef(d,kernel->parameters,1e-5, kernel->bfgsstate);
             alglib::minlbfgssetcond(kernel->bfgsstate, epsg, epsf, epsx, maxits);
             alglib::minlbfgsoptimize2(kernel->bfgsstate, kernel->function_alglib);
             alglib::minlbfgsresults(kernel->bfgsstate, kernel->parameters, rep);
@@ -274,6 +302,7 @@ void gaussian_process::optimize_parameters(double stopping_criterion, int solver
 
     // set current parameters to the best found so far
     init(kernel->best_parameters,kernel->best_parameters(d-1));
+    kernel->best_log_l = log_marginal_likelihood();
 
     if (debug_print){
         std::cout<<"kernel params after optimization\t";
@@ -308,7 +337,8 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
         int d = x_i.size();
         double dist=0;
         for (int i=0; i<d; i++){
-            dist += (x_i[i]-x_j[i])*(x_i[i]-x_j[i])*std::fabs(parameters(i+1));
+            //dist += (x_i[i]-x_j[i])*(x_i[i]-x_j[i])*std::fabs(parameters(i+1));
+            dist += (x_i[i]-x_j[i])*(x_i[i]-x_j[i])/std::fabs(parameters(i+1));
         }
         return parameters(0)*parameters(0)*std::exp(-0.5*dist);
     };
@@ -320,9 +350,9 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
         this->init(params, params(d+1));
         this->kernel->iters++;
         func = -this->log_marginal_likelihood();
-        if (!std::isinf(func) && func<=this->kernel->best_log_l){
+        if (!std::isinf(func) && func<=-1.0*this->kernel->best_log_l){
             this->kernel->best_parameters = alglib::real_1d_array(params);
-            this->kernel->best_log_l = func;
+            this->kernel->best_log_l = -1.0*func;
         }
     };
 
@@ -346,13 +376,13 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
         func = -this->log_marginal_likelihood();
 
         //check if this is the best set of parameters we have obtained so far
-        if (!std::isinf(func) && func<=this->kernel->best_log_l){
+        if (!std::isinf(func) && func<=-1.0*this->kernel->best_log_l){
             this->kernel->best_parameters = alglib::real_1d_array(params);
-            this->kernel->best_log_l = 1*func;
+            this->kernel->best_log_l = -1.0*func;
         }
 
         // compute (-(K^{-1}*y)*(K^{-1}*y)^T- K^{-1})^{T}
-        MatrixXd  K_a = (this->KY*(this->KY.transpose()) - this->Kinv);
+        MatrixXd  K_a = (this->KinvY*(this->KinvY.transpose()) - this->Kinv);
 
         // here we are computing the (negative) partial derivatives as
         //                         -1/2*trace{ ( (K^{-1}*y)*(K^{-1}*y)^T- K^{-1} )*dK/d_param ) }
@@ -380,7 +410,8 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
                 grad(0) += K_a(j,i)*( two_sigma_f*exp_ij );
                 // then accumulate the gradient for the length scales
                 for ( int k=0; k<d; k++){
-                    grad(k+1) += K_a(j,i)*( minus_half_sigma_f_sq*(x_i[k]-x_j[k])*(x_i[k]-x_j[k])*exp_ij );
+                    //grad(k+1) += K_a(j,i)*( minus_half_sigma_f_sq*(x_i[k]-x_j[k])*(x_i[k]-x_j[k])*exp_ij );
+                    grad(k+1) += K_a(j,i)*( -(1/(params(k+1)*params(k+1)))*minus_half_sigma_f_sq*(x_i[k]-x_j[k])*(x_i[k]-x_j[k])*exp_ij );
                 }
                 // finally accumulate the gradient for the noise parameter
                 grad(d+1) += K_a(j,i)*( (i==j)?two_sigma_n:0 );
@@ -409,7 +440,7 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
         std::cout<<" Ka: \n"<<K_a<<std::endl;
         std::cout<<" X: \n"<<this->X.format(fmt)<<std::endl;
         std::cout<<" Y: \n"<<this->Y.transpose().format(fmt)<<std::endl;
-        std::cout<<" KY: \n"<<this->KY.transpose()<<std::endl;
+        std::cout<<" KinvY: \n"<<this->KinvY.transpose()<<std::endl;
         */
     };
     kernel = new kernel_object(se_kernel, se_gradient, se_func);
@@ -423,7 +454,134 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
     
     kernel->best_parameters = alglib::real_1d_array(parameters);
     init(parameters,parameters(input_dimensions+1));
-    kernel->best_log_l = -log_marginal_likelihood();
+    kernel->best_log_l = log_marginal_likelihood();
+}
+
+void gaussian_process::set_RBF_kernel(){
+    // parameters correspond to (sigma_f^2, 1/(2*l_1), ... , 1/(2*l_d), sigma_n^2)
+    // kernel function for evaluations
+    std::function<kernel_func> rbf_kernel = [this](VectorXd x_i, VectorXd &x_j, const alglib::real_1d_array &parameters){
+        //TODO receive distance function as parameter
+        int d = x_i.size();
+        double dist=0;
+        for (int i=0; i<d; i++){
+            //dist += (x_i[i]-x_j[i])*(x_i[i]-x_j[i])*std::fabs(parameters(1));
+            dist += (x_i[i]-x_j[i])*(x_i[i]-x_j[i])/std::fabs(parameters(1));
+        }
+        return parameters(0)*parameters(0)*std::exp(-0.5*dist);
+    };
+
+    // gradient of log likelihood
+    std::function<kernel_func_alglib> rbf_func= [this](const alglib::real_1d_array &params, double &func, void *ptr){
+        // update K and Kinv
+        this->init(params, params(2));
+        this->kernel->iters++;
+        func = -this->log_marginal_likelihood();
+        if (!std::isinf(func) && func<=-1.0*this->kernel->best_log_l){
+            this->kernel->best_parameters = alglib::real_1d_array(params);
+            this->kernel->best_log_l = -1.0*func;
+        }
+    };
+
+    // gradient of log likelihood
+    std::function<gradient_func> rbf_gradient = [this](const alglib::real_1d_array &params, double &func, alglib::real_1d_array &grad, void *ptr){
+        int d = this->X.rows();
+        int n = this->X.cols();
+        int param_d = params.length();
+        double two_sigma_f = 2.0*std::fabs(params(0));
+        double sigma_n_sq = params(2)*params(2);
+        double two_sigma_n = 2.0*std::fabs(params(2));
+        double one_over_sigma_f_sq = 1.0/(params(0)*params(0));
+        double minus_half_sigma_f_sq = (-0.5*params(0)*params(0));
+        double exp_ij;
+        VectorXd x_i,x_j;
+
+        // update K and Kinv
+        this->init(params, params(2));
+        this->kernel->iters++;
+        //compute negative log likelihood
+        func = -this->log_marginal_likelihood();
+
+        //check if this is the best set of parameters we have obtained so far
+        if (!std::isinf(func) && func<= -1.0*this->kernel->best_log_l){
+            this->kernel->best_parameters = alglib::real_1d_array(params);
+            this->kernel->best_log_l = -1.0*func;
+        }
+
+        // compute (-(K^{-1}*y)*(K^{-1}*y)^T- K^{-1})^{T}
+        MatrixXd  K_a = (this->KinvY*(this->KinvY.transpose()) - this->Kinv);
+
+        // here we are computing the (negative) partial derivatives as
+        //                         -1/2*trace{ ( (K^{-1}*y)*(K^{-1}*y)^T- K^{-1} )*dK/d_param ) }
+        //                       = -1/2*trace { K_a*dK/d_param }
+        //                       = -1/2*trace { K_a^{T}*dK/d_param }  (K_a is symmetric)
+        //                       = -1/2*sum_row { sum_col { { K_a ** dK/d_param } }  (** means element-wise product)
+        
+        // initialize partial derivatives to 0
+        for(int i=0; i<param_d; i++){ 
+             grad(i)=0.0;
+        }
+
+        // accumulate the trace value
+        for (int j=0; j<n ; j++){
+            for (int i=0; i<n ; i++){
+                x_i = this->X.col(i);
+                x_j = this->X.col(j);
+                if (i==j){
+                    exp_ij = (K(i,j)-sigma_n_sq)*one_over_sigma_f_sq;
+                }
+                else{
+                    exp_ij = (K(i,j))*one_over_sigma_f_sq;
+                }
+                // first accumulate the gradient for sigma_f^2
+                grad(0) += K_a(j,i)*( two_sigma_f*exp_ij );
+                // then accumulate the gradient for the length scale
+                for ( int k=0; k<d; k++){
+                    //grad(1) += K_a(j,i)*( minus_half_sigma_f_sq*(x_i[k]-x_j[k])*(x_i[k]-x_j[k])*exp_ij );
+                    grad(1) += K_a(j,i)*( -(1/(params(1)*params(1)))*minus_half_sigma_f_sq*(x_i[k]-x_j[k])*(x_i[k]-x_j[k])*exp_ij );
+                }
+                // finally accumulate the gradient for the noise parameter
+                grad(2) += K_a(j,i)*( (i==j)?two_sigma_n:0 );
+            }
+        }
+        for(int i=0; i<param_d; i++){ 
+           grad(i)=-0.5*grad(i);
+        }
+        // debug info:
+        /*
+        IOFormat fmt(FullPrecision, 0, ", ", ",\n", "{", "}", "{", "}");
+        std::cout<<"log likelihood: "<<-func<<std::endl;
+        std::cout<<"x: ";
+            for(int i=0; i<param_d; i++){ 
+               std::cout<<" "<<params(i);
+            }
+        std::cout<<std::endl;
+        std::cout<<"gradient: ";
+            for(int i=0; i<param_d; i++){ 
+               std::cout<<" "<<grad(i);
+            }
+        std::cout<<std::endl;
+        
+        std::cout<<" K: \n"<<this->K<<std::endl;
+        std::cout<<" Kinv: \n"<<this->Kinv<<std::endl;
+        std::cout<<" Ka: \n"<<K_a<<std::endl;
+        std::cout<<" X: \n"<<this->X.format(fmt)<<std::endl;
+        std::cout<<" Y: \n"<<this->Y.transpose().format(fmt)<<std::endl;
+        std::cout<<" KinvY: \n"<<this->KinvY.transpose()<<std::endl;
+        */
+    };
+    kernel = new kernel_object(rbf_kernel, rbf_gradient, rbf_func);
+
+    // number of parameters is d+2
+    alglib::real_1d_array parameters;
+    parameters.setlength(3);
+    for (int i=0; i<parameters.length(); i++){
+        parameters(i) = 1.0;
+    }
+    
+    kernel->best_parameters = alglib::real_1d_array(parameters);
+    init(parameters,parameters(2));
+    kernel->best_log_l = log_marginal_likelihood();
 }
 
 //==================================== kernel object =====================================//

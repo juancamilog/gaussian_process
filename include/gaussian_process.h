@@ -55,8 +55,8 @@ class gaussian_process{
         void init(const alglib::real_1d_array x);
 
         void add_sample(VectorXd &X, double value);
-        double get_maximum_variance();
-        double compute_maximum_variance();
+        void remove_sample(int sample_id);
+
         int dataset_size();
         int input_dimensions();
 
@@ -64,15 +64,19 @@ class gaussian_process{
         MatrixXd kernel_matrix(MatrixXd &X, bool noise_free=false);
         VectorXd compute_marginal_covariance(VectorXd &x);
         double log_marginal_likelihood();
+        double leave_one_out_log_probability();
         void prediction(VectorXd &x, VectorXd &mean, double &variance);
+        void predictive_error_and_variance(VectorXd &error, VectorXd &variance, int type = 0);
 
         void set_opt_starting_point(VectorXd point);
         void set_opt_random_start(double scale=1.0, double offset = 0.0);
         void optimize_parameters(double stopping_criterion=1e-7,int solver = 0);
         void optimize_parameters_random_restarts(double stopping_criterion=1e-7,int solver = 0, int restarts=2,double scale=1.0, double offset = 0.0);
 
+
         /* square exponential (RBF) kernel */
         void set_SE_kernel(int input_dimensions);
+        void set_RBF_kernel();
 
         void set_debug_print(bool dbg_prnt);
 
@@ -87,15 +91,13 @@ class gaussian_process{
 
     private:
         MatrixXd K;
-        VectorXd KY;
+        VectorXd KinvY;
         MatrixXd Kinv;
         LLT<MatrixXd,Lower> llt_of_K;
         double log_det_K;
         double normalization_const;
-        double maximum_variance;
         MatrixXd X;
         VectorXd Y;
-        MatrixXd KinvY;
 
         bool debug_print;
 };

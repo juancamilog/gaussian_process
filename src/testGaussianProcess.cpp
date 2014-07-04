@@ -110,7 +110,12 @@ int main(int argc, char* argv[])
     } 
     std::cout<<"n="<<n<<", n_train="<<n_train<<std::endl;
 
-    std::cout<<"Maximum variance of dataset "<<GP.compute_maximum_variance()<<std::endl;
+    VectorXd err, var;
+    
+    GP.predictive_error_and_variance(err,var,1);
+
+    std::cout<<"Dataset Error:"<<err.transpose()<<std::endl;
+    std::cout<<"Dataset Variance:"<<var.transpose()<<std::endl;
 
    
     VectorXd xp(2);
