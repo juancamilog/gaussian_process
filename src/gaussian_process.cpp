@@ -31,11 +31,13 @@ void gaussian_process::init(const alglib::real_1d_array x, double observation_no
     Kinv = llt_of_K.solve(MatrixXd::Identity(n,n));
     KinvY = llt_of_K.solve(Y);
     log_det_K = 0;
+    //float logdetk = 0;
+    //#pragma omp parallel for reduction(+:logdetk)
     for (int i =0; i < n ; i++){
-        //log_det_K +=  std::log((llt_of_K.matrixL())(i,i)*(llt_of_K.matrixL())(i,i));
         log_det_K +=  std::log((llt_of_K.matrixL())(i,i));
+        //logdetk +=  std::log((llt_of_K.matrixL())(i,i));
     }
-    log_det_K *= 2;
+    log_det_K = 2*log_det_K;
     normalization_const = 0.5*n*std::log(2*PI);
 }
 
@@ -103,8 +105,10 @@ VectorXd gaussian_process::kernel_vector(VectorXd &x){
     int n = X.cols();
     VectorXd kx = VectorXd(n);
     VectorXd x_i;
+    //#pragma omp parallel for
     for(int i=0; i<n; i++){
         x_i = X.col(i);
+        //VectorXd x_i = X.col(i);
         kx[i]=kernel->function(x_i,x,kernel->parameters);
     }
     return kx;
@@ -114,12 +118,15 @@ VectorXd gaussian_process::kernel_vector(VectorXd &x){
 MatrixXd gaussian_process::kernel_matrix(MatrixXd &X, bool noise_free){
     int n = X.cols();
     K.setZero(n,n);
-    VectorXd x_i,x_j;
+    //VectorXd x_i,x_j;
 
+    #pragma omp parallel for
     for (int j=0; j<n ; j++){
         for (int i=j; i<n ; i++){
-            x_i = X.col(i);
-            x_j = X.col(j);
+            //x_i = X.col(i);
+            //x_j = X.col(j);
+            VectorXd x_i = X.col(i);
+            VectorXd x_j = X.col(j);
             K(i,j) = kernel->function(x_i,x_j,kernel->parameters);
             if (i==j){
                 if(!noise_free){
@@ -156,13 +163,6 @@ double gaussian_process::log_marginal_likelihood(){
            std::cout<<" "<<kernel->parameters(i);
         }
         std::cout<<std::endl;
-        /*
-        std::cout<<" K: \n"<<K<<std::endl;
-        std::cout<<" Kinv: \n"<<Kinv<<std::endl;
-        std::cout<<" Y: \n"<<Y.transpose()<<std::endl;
-        std::cout<<" KinvY: \n"<<KinvY.transpose()<<std::endl;
-        */
-
         std::cout<<"fit error: "<<model_fit_error<<" complexity penalty: "<<complexity_penalty<<" normalization constant: "<<normalization_const<<std::endl;
     }
     return -model_fit_error - complexity_penalty - normalization_const;
@@ -203,12 +203,6 @@ void gaussian_process::set_opt_random_start(double scale, double offset){
 // search for the maximum likelihood parameters of the kernel
 void gaussian_process::optimize_parameters(double stopping_criterion, int solver){
     int d = kernel->parameters.length();
-    // make sure that we have the correct value of the likelihood function for the current parameters
-    /*alglib::real_1d_array tmp(kernel->parameters);
-    init(kernel->best_parameters,kernel->best_parameters(d-1));
-    kernel->best_log_l = this->log_marginal_likelihood();
-    kernel->parameters = alglib::real_1d_array(tmp);*/
-    //
 
     if (debug_print){
         std::cout<<"Best kernel parameters before optimization: \t";
@@ -229,7 +223,7 @@ void gaussian_process::optimize_parameters(double stopping_criterion, int solver
     double epsg = stopping_criterion;
     double epsf = 0;
     double epsx = 0;
-    alglib::ae_int_t maxits = 100;
+    alglib::ae_int_t maxits = 50;
     try{
         if (solver == 0){
             if (debug_print)
@@ -366,8 +360,8 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
         double two_sigma_n = 2.0*std::fabs(params(d+1));
         double one_over_sigma_f_sq = 1.0/(params(0)*params(0));
         double minus_half_sigma_f_sq = (-0.5*params(0)*params(0));
-        double exp_ij;
-        VectorXd x_i,x_j;
+        //double exp_ij;
+        //VectorXd x_i,x_j;
 
         // update K and Kinv
         this->init(params, params(d+1));
@@ -396,10 +390,12 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
         }
 
         // accumulate the trace value
+        #pragma omp parallel for collapse(2) shared(grad)
         for (int j=0; j<n ; j++){
             for (int i=0; i<n ; i++){
-                x_i = this->X.col(i);
-                x_j = this->X.col(j);
+                VectorXd x_i = this->X.col(i);
+                VectorXd x_j = this->X.col(j);
+                double exp_ij;
                 if (i==j){
                     exp_ij = (K(i,j)-sigma_n_sq)*one_over_sigma_f_sq;
                 }
@@ -407,42 +403,27 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
                     exp_ij = (K(i,j))*one_over_sigma_f_sq;
                 }
                 // first accumulate the gradient for sigma_f^2
+                #pragma omp atomic
                 grad(0) += K_a(j,i)*( two_sigma_f*exp_ij );
+
                 // then accumulate the gradient for the length scales
                 for ( int k=0; k<d; k++){
                     //grad(k+1) += K_a(j,i)*( minus_half_sigma_f_sq*(x_i[k]-x_j[k])*(x_i[k]-x_j[k])*exp_ij );
+                    //#pragma omp critical
+                    #pragma omp atomic
                     grad(k+1) += K_a(j,i)*( -(1/(params(k+1)*params(k+1)))*minus_half_sigma_f_sq*(x_i[k]-x_j[k])*(x_i[k]-x_j[k])*exp_ij );
                 }
                 // finally accumulate the gradient for the noise parameter
+                //#pragma omp critical
+                #pragma omp atomic
                 grad(d+1) += K_a(j,i)*( (i==j)?two_sigma_n:0 );
             }
         }
         for(int i=0; i<param_d; i++){ 
            grad(i)=-0.5*grad(i);
         }
-        // debug info:
-        /*
-        IOFormat fmt(FullPrecision, 0, ", ", ",\n", "{", "}", "{", "}");
-        std::cout<<"log likelihood: "<<-func<<std::endl;
-        std::cout<<"x: ";
-            for(int i=0; i<param_d; i++){ 
-               std::cout<<" "<<params(i);
-            }
-        std::cout<<std::endl;
-        std::cout<<"gradient: ";
-            for(int i=0; i<param_d; i++){ 
-               std::cout<<" "<<grad(i);
-            }
-        std::cout<<std::endl;
-        
-        std::cout<<" K: \n"<<this->K<<std::endl;
-        std::cout<<" Kinv: \n"<<this->Kinv<<std::endl;
-        std::cout<<" Ka: \n"<<K_a<<std::endl;
-        std::cout<<" X: \n"<<this->X.format(fmt)<<std::endl;
-        std::cout<<" Y: \n"<<this->Y.transpose().format(fmt)<<std::endl;
-        std::cout<<" KinvY: \n"<<this->KinvY.transpose()<<std::endl;
-        */
     };
+
     kernel = new kernel_object(se_kernel, se_gradient, se_func);
 
     // number of parameters is d+2
@@ -493,8 +474,8 @@ void gaussian_process::set_RBF_kernel(){
         double two_sigma_n = 2.0*std::fabs(params(2));
         double one_over_sigma_f_sq = 1.0/(params(0)*params(0));
         double minus_half_sigma_f_sq = (-0.5*params(0)*params(0));
-        double exp_ij;
-        VectorXd x_i,x_j;
+        //double exp_ij;
+        //VectorXd x_i,x_j;
 
         // update K and Kinv
         this->init(params, params(2));
@@ -523,10 +504,12 @@ void gaussian_process::set_RBF_kernel(){
         }
 
         // accumulate the trace value
+        #pragma omp parallel for collapse(2) shared(grad)
         for (int j=0; j<n ; j++){
             for (int i=0; i<n ; i++){
-                x_i = this->X.col(i);
-                x_j = this->X.col(j);
+                VectorXd x_i = this->X.col(i);
+                VectorXd x_j = this->X.col(j);
+                double exp_ij;
                 if (i==j){
                     exp_ij = (K(i,j)-sigma_n_sq)*one_over_sigma_f_sq;
                 }
@@ -534,41 +517,23 @@ void gaussian_process::set_RBF_kernel(){
                     exp_ij = (K(i,j))*one_over_sigma_f_sq;
                 }
                 // first accumulate the gradient for sigma_f^2
+                #pragma omp atomic
                 grad(0) += K_a(j,i)*( two_sigma_f*exp_ij );
                 // then accumulate the gradient for the length scale
                 for ( int k=0; k<d; k++){
                     //grad(1) += K_a(j,i)*( minus_half_sigma_f_sq*(x_i[k]-x_j[k])*(x_i[k]-x_j[k])*exp_ij );
+                    #pragma omp atomic
                     grad(1) += K_a(j,i)*( -(1/(params(1)*params(1)))*minus_half_sigma_f_sq*(x_i[k]-x_j[k])*(x_i[k]-x_j[k])*exp_ij );
                 }
                 // finally accumulate the gradient for the noise parameter
+                #pragma omp atomic
                 grad(2) += K_a(j,i)*( (i==j)?two_sigma_n:0 );
             }
         }
+
         for(int i=0; i<param_d; i++){ 
            grad(i)=-0.5*grad(i);
         }
-        // debug info:
-        /*
-        IOFormat fmt(FullPrecision, 0, ", ", ",\n", "{", "}", "{", "}");
-        std::cout<<"log likelihood: "<<-func<<std::endl;
-        std::cout<<"x: ";
-            for(int i=0; i<param_d; i++){ 
-               std::cout<<" "<<params(i);
-            }
-        std::cout<<std::endl;
-        std::cout<<"gradient: ";
-            for(int i=0; i<param_d; i++){ 
-               std::cout<<" "<<grad(i);
-            }
-        std::cout<<std::endl;
-        
-        std::cout<<" K: \n"<<this->K<<std::endl;
-        std::cout<<" Kinv: \n"<<this->Kinv<<std::endl;
-        std::cout<<" Ka: \n"<<K_a<<std::endl;
-        std::cout<<" X: \n"<<this->X.format(fmt)<<std::endl;
-        std::cout<<" Y: \n"<<this->Y.transpose().format(fmt)<<std::endl;
-        std::cout<<" KinvY: \n"<<this->KinvY.transpose()<<std::endl;
-        */
     };
     kernel = new kernel_object(rbf_kernel, rbf_gradient, rbf_func);
 

@@ -8,8 +8,10 @@
 #include<execinfo.h>
 #include <random>
 #include <chrono>
+#include <omp.h>
 
 #define PI 3.14159265358979
+
 
 using namespace Eigen;
 

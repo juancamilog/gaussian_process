@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-GP_DIR=$(pwd)/
+GP_DIR=$(pwd)
 DEPS_DIR=$(pwd)/deps
 
 mkdir -p $DEPS_DIR
@@ -17,17 +17,20 @@ if [ ! -d "alglib" ]; then
     patch $DEPS_DIR/alglib/cpp/src/optimization.cpp $DEPS_DIR/../alglib_patches/optimization.cpp.patch
 fi
 
-echo "Getting libeigen3..."
-sudo apt-get install libeigen3-dev
+if [ ! -d "eigen" ]; then
+    echo "Getting libeigen3..."
+    hg clone https://bitbucket.org/eigen/eigen/
+fi
+#sudo apt-get install libeigen3-dev
+cd $GP_DIR
 
 # update links to dependencies
-rm -f /include/alglib /include/eigen
-ln -s $DEPS_DIR/alglib/cpp include/alglib
+rm -f ./include/alglib ./include/eigen
+ln -s $DEPS_DIR/alglib/cpp ./include/alglib
+ln -s $DEPS_DIR/eigen ./include/eigen
 
-
-cd $GP_DIR
 # build
-mkdir build
+mkdir -p build
 cd build
 cmake ..
 make -j2

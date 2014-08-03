@@ -11,6 +11,7 @@
 std::random_device rd;
 std::mt19937 gen(rd());
 
+
 double step_size = 0.1;
 double noise = 1.0;
 int n_train = 500;
@@ -51,6 +52,7 @@ void parse_args(int argc,char* argv[]){
 
 int main(int argc, char* argv[])
 {
+    Eigen::setNbThreads(2);
     parse_args(argc,argv);
 
     std::vector<data_point> f;
@@ -75,7 +77,9 @@ int main(int argc, char* argv[])
         Y(i,0) = f[i].second;
     } 
     
+    // this is only one way of doing it, you can also add samples one by one, with GP.add_sample(VectorXd x, double y)
     gaussian_process GP(X,Y);
+
     GP.set_debug_print(true);
 
     GP.set_SE_kernel(X.rows());
@@ -114,9 +118,8 @@ int main(int argc, char* argv[])
     
     GP.predictive_error_and_variance(err,var,1);
 
-    std::cout<<"Dataset Error:"<<err.transpose()<<std::endl;
-    std::cout<<"Dataset Variance:"<<var.transpose()<<std::endl;
-
+    //std::cout<<"Dataset Error:"<<err.transpose()<<std::endl;
+    //std::cout<<"Dataset Variance:"<<var.transpose()<<std::endl;
    
     VectorXd xp(2);
     xp(0)=100; xp(1)=100;
