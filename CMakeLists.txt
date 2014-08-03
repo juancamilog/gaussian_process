@@ -12,7 +12,9 @@ SET(CMAKE_BUILD_TYPE Release)
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -std=gnu++0x")
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse -msse2 -msse3 -O3")
 
-SET( EIGEN3_INCLUDE_DIR  ${PROJECT_SOURCE_DIR}/include/eigen )
+find_package(Eigen3 REQUIRED)
+
+#SET( EIGEN3_INCLUDE_DIR  ${PROJECT_SOURCE_DIR}/include/eigen )
 #SET( DLIB_SOURCE_DIR  ${PROJECT_SOURCE_DIR}/include/dlib-18.4 )
 SET( ALGLIB_SOURCE_DIR  ${PROJECT_SOURCE_DIR}/include/alglib/src )
 

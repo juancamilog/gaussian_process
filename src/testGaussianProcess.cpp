@@ -105,7 +105,7 @@ int main(int argc, char* argv[])
         std::cout<<std::fixed
                  <<"x: "<<x.transpose()
                  <<",\tf(x): "<<func(x[0], x[1])
-                 <<",\tf*(x): "<<mean.transpose()
+                 <<",\tf*(x): "<<mean
                  <<",\tstd(x): "<<std::sqrt(variance)<<std::endl;
     } 
     std::cout<<"n="<<n<<", n_train="<<n_train<<std::endl;
@@ -125,6 +125,6 @@ int main(int argc, char* argv[])
     std::cout<<std::fixed
              <<"x: "<<xp.transpose()
              <<",\tf(x): "<<func(xp[0], xp[1])
-             <<",\tf*(x): "<<mean.transpose()
+             <<",\tf*(x): "<<mean
              <<",\tstd(x): "<<std::sqrt(variance)<<std::endl;
 }
