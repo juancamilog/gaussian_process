@@ -19,6 +19,18 @@ typedef double kernel_func(VectorXd&,VectorXd&, alglib::real_1d_array &);
 typedef void gradient_func(const alglib::real_1d_array &, double &, alglib::real_1d_array &, void *);
 typedef void kernel_func_alglib(const alglib::real_1d_array &, double &, void *);
 
+enum{
+   ALGLIB_SOLVER_LBFGS,
+   ALGLIB_SOLVER_NUM_LBFGS,
+   ALGLIB_SOLVER_CONSTRAINED_CG,
+   ALGLIB_SOLVER_CG
+};
+
+enum{
+   KERNEL_RBF,
+   KERNEL_SQUARED_EXPONENTIAL
+};
+
 class kernel_object{
     public:
         kernel_object();
@@ -34,7 +46,9 @@ class kernel_object{
         std::function<gradient_func> gradient;
         std::function<kernel_func_alglib> function_alglib;
 
-        /* for dlib */
+        int id;
+
+        /* for alglib */
         alglib::real_1d_array parameters;
         double observation_noise;
         int iters;
@@ -73,7 +87,7 @@ class gaussian_process{
         void set_opt_starting_point(VectorXd point);
         void set_opt_random_start(double scale=1.0, double offset = 0.0);
         void optimize_parameters(double stopping_criterion=1e-7,int solver = 0);
-        void optimize_parameters_random_restarts(double stopping_criterion=1e-7,int solver = 0, int restarts=2,double scale=1.0, double offset = 0.0);
+        void optimize_parameters_random_restarts(double stopping_criterion=1e-7,int solver = 0, int restarts=2,double scale=1.0);
 
 
         /* square exponential (RBF) kernel */

@@ -93,7 +93,7 @@ int main(int argc, char* argv[])
     //Vector4d init_params = VectorXd::Random(4).cwiseAbs()*10;
     //GP.set_opt_starting_point(init_params);
     std::srand(std::time(NULL));
-    GP.optimize_parameters_random_restarts(1e-9,optimization_algorithm, 10,50,50);
+    GP.optimize_parameters_random_restarts(1e-6,optimization_algorithm, 10,5);
 
     end = std::chrono::system_clock::now();
 
