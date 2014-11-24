@@ -12,7 +12,7 @@ std::random_device rd;
 std::mt19937 gen(rd());
 
 
-double step_size = 0.1;
+double step_size = 0.05;
 double noise = 1.0;
 int n_train = 500;
 int optimization_algorithm = 0;
@@ -57,8 +57,8 @@ int main(int argc, char* argv[])
 
     std::vector<data_point> f;
     // this is our data
-    for (double x0 = -100*step_size; x0<10*step_size; x0=x0+step_size){
-      for (double x1 = -10*step_size; x1<10*step_size; x1=x1+step_size){
+    for (double x0 = -20; x0<20; x0=x0+step_size){
+      for (double x1 = -20; x1<20; x1=x1+step_size){
           VectorXd xp(2);
           xp(0)=x0; xp(1)=x1;
           f.push_back(data_point(xp,func(x0,x1,noise)));
@@ -68,7 +68,7 @@ int main(int argc, char* argv[])
     int n = f.size();
     // pick n_train samples from f
     std::shuffle(f.begin(),f.end(),gen);
-    
+    std::cout<<"n: "<<n<<"n_train: "<<n_train<<std::endl;
     MatrixXd X(2,n_train);
     MatrixXd Y(n_train,1);
     for (int i = 0; i<n_train; i++){

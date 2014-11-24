@@ -21,24 +21,49 @@ gaussian_process::gaussian_process(MatrixXd &Xin, MatrixXd &Yin){
 
 // precomputations
 void gaussian_process::init(const alglib::real_1d_array x, double observation_noise, bool noise_free){
+    //    std::chrono::time_point<std::chrono::system_clock> start,end;
+    //    std::chrono::duration<double> secs;
     kernel->parameters = alglib::real_1d_array(x);
     kernel->observation_noise = observation_noise;
 
     int n = X.cols();
     // kernel matrix ( !noise_free => K= K_noise_free + sigma_n*I
+    //    start = std::chrono::system_clock::now();
     K = kernel_matrix(X,noise_free);
+    //    end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"K: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
     llt_of_K = LLT<MatrixXd,Lower>(K);
-    Kinv = llt_of_K.solve(MatrixXd::Identity(n,n));
+    //    end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"llt of K: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
+    if ( Kinv.cols() < n){
+        Kinv = MatrixXd::Zero(n,n);
+    } else {
+        Kinv.setZero();
+    }
+    
+    static Ref<MatrixXd> tmp = Kinv;
+    static const LLT<MatrixXd,Lower>& llt_of_tmp = llt_of_K;
+#pragma omp parallel shared(tmp,llt_of_tmp)
+    {
+#pragma omp for schedule (static)
+        for (int i =0; i < n ; i++){
+            tmp(i,i) = 1.0;
+            tmp.col(i) = llt_of_tmp.solve(tmp.col(i));
+        }
+    }
+    //    end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"Kinv: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
+    //Kinv = llt_of_K.solve(MatrixXd::Identity(n,n));
+    //    end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"Kinv: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
     KinvY = llt_of_K.solve(Y);
+    //    end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"KinvY: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
     //log_det_K = 0;
     float logdetk = 0;
-#pragma omp parallel for reduction(+:logdetk) num_threads(omp_get_num_procs()) schedule(static)
+    //#pragma omp parallel for reduction(+:logdetk) num_threads(omp_get_num_procs()) schedule(static)
     for (int i =0; i < n ; i++){
         //log_det_K +=  std::log((llt_of_K.matrixL())(i,i));
         logdetk +=  std::log((llt_of_K.matrixL())(i,i));
     }
     //log_det_K = 2*log_det_K;
     log_det_K = 2*logdetk;
+    //    end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"logdetk: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
     normalization_const = 0.5*n*std::log(2*PI);
 }
 
@@ -105,7 +130,7 @@ void gaussian_process::predictive_error_and_variance(VectorXd &error, VectorXd &
 VectorXd gaussian_process::kernel_vector(VectorXd &x){
     static int n = X.cols();
     VectorXd kx = VectorXd(n);
-#pragma omp parallel for num_threads(omp_get_num_procs()) schedule(static)
+    //#pragma omp parallel for num_threads(omp_get_num_procs()) schedule(static)
     for(int i=0; i<n; i++){
         VectorXd x_i = X.col(i);
         kx[i]=kernel->function(x_i,x,kernel->parameters);
@@ -314,8 +339,8 @@ void gaussian_process::optimize_parameters_random_restarts(double stopping_crite
             starting_point[i] *= scale*kernel->parameters[i];
             // in these cases, the parameters should be always positive
             if (solver == ALGLIB_SOLVER_CONSTRAINED_CG 
-                || kernel->id == KERNEL_SQUARED_EXPONENTIAL
-                || kernel->id == KERNEL_RBF
+                    || kernel->id == KERNEL_SQUARED_EXPONENTIAL
+                    || kernel->id == KERNEL_RBF
                ){
                 starting_point[i] *= starting_point[i]>0?1.0:-1.0;
             }
@@ -365,6 +390,9 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
 
     // gradient of log likelihood
     std::function<gradient_func> se_gradient = [this](const alglib::real_1d_array &params, double &func, alglib::real_1d_array &grad, void *ptr){
+        //        std::chrono::time_point<std::chrono::system_clock> start,end;
+        //        std::chrono::duration<double> secs;
+
         static int d = this->X.rows();
         static int n = this->X.cols();
         static int param_d = params.length();
@@ -375,21 +403,25 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
         double minus_half_sigma_f_sq = (-0.5*params(0)*params(0));
         //double exp_ij;
         //VectorXd x_i,x_j;
-
+        //        start = std::chrono::system_clock::now();
         // update K and Kinv
         this->init(params, params(d+1));
+        //        end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"init: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
         this->kernel->iters++;
         //compute negative log likelihood
         func = -this->log_marginal_likelihood();
+        //        end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"lml: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
 
         //check if this is the best set of parameters we have obtained so far
         if (!std::isinf(func) && func<=-1.0*this->kernel->best_log_l){
             this->kernel->best_parameters = alglib::real_1d_array(params);
             this->kernel->best_log_l = -1.0*func;
         }
+        //        end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"updatebest: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
 
         // compute (-(K^{-1}*y)*(K^{-1}*y)^T- K^{-1})^{T}
         MatrixXd  K_a = (this->KinvY*(this->KinvY.transpose()) - this->Kinv);
+        //        end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"Ka: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
 
         // here we are computing the (negative) partial derivatives as
         //                         -1/2*trace{ ( (K^{-1}*y)*(K^{-1}*y)^T- K^{-1} )*dK/d_param ) }
@@ -398,22 +430,26 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
         //                       = -1/2*sum_row { sum_col { { K_a ** dK/d_param } }  (** means element-wise product)
 
         // initialize partial derivatives to 0
-        static alglib::real_1d_array tmp;
-        tmp.setlength(param_d);
         for(int i=0; i<param_d; i++){ 
-            tmp(i)=0;
             grad(i)=0;
         }
 
         // accumulate the trace value
-#pragma omp parallel shared(grad) firstprivate(tmp) num_threads(omp_get_num_procs())
+#pragma omp parallel shared(grad) num_threads(omp_get_num_procs())
         {
+            alglib::real_1d_array tmp;
+            tmp.setlength(param_d);
+            for(int i=0; i<param_d; i++){ 
+                tmp(i)=0;
+            }
+            VectorXd x_i;
+            VectorXd x_j;
+            double exp_ij;
 #pragma omp for collapse(2) schedule(static)
             for (int j=0; j<n ; j++){
                 for (int i=0; i<n ; i++){
-                    VectorXd x_i = this->X.col(i);
-                    VectorXd x_j = this->X.col(j);
-                    double exp_ij;
+                    x_i = this->X.col(i);
+                    x_j = this->X.col(j);
                     if (i==j){
                         exp_ij = (K(i,j)-sigma_n_sq)*one_over_sigma_f_sq;
                     }
@@ -437,6 +473,7 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
                 grad(i)+=-0.5*tmp(i);
             }
         }
+        //        end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"grad: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
     };
 
     kernel = new kernel_object(se_kernel, se_gradient, se_func);
@@ -515,22 +552,26 @@ void gaussian_process::set_RBF_kernel(){
         //                       = -1/2*sum_row { sum_col { { K_a ** dK/d_param } }  (** means element-wise product)
 
         // initialize partial derivatives to 0
-        static alglib::real_1d_array tmp;
-        tmp.setlength(param_d);
         for(int i=0; i<param_d; i++){ 
-            tmp(i)=0;
             grad(i)=0;
         }
 
         // accumulate the trace value
-#pragma omp parallel shared(grad) firstprivate(tmp) num_threads(omp_get_num_procs())
+#pragma omp parallel shared(grad) num_threads(omp_get_num_procs())
         {
-#pragma omp for collapse(2) 
+            alglib::real_1d_array tmp;
+            tmp.setlength(param_d);
+            for(int i=0; i<param_d; i++){ 
+                tmp(i)=0;
+            }
+            VectorXd x_i;
+            VectorXd x_j;
+            double exp_ij;
+#pragma omp for collapse(2) schedule(static)
             for (int j=0; j<n ; j++){
                 for (int i=0; i<n ; i++){
-                    VectorXd x_i = this->X.col(i);
-                    VectorXd x_j = this->X.col(j);
-                    double exp_ij;
+                    x_i = this->X.col(i);
+                    x_j = this->X.col(j);
                     if (i==j){
                         exp_ij = (K(i,j)-sigma_n_sq)*one_over_sigma_f_sq;
                     }

@@ -33,5 +33,5 @@ ln -s $DEPS_DIR/eigen ./include/eigen
 mkdir -p build
 cd build
 cmake ..
-make -j2
+make -j3
 cd ..
