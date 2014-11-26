@@ -21,24 +21,23 @@ gaussian_process::gaussian_process(MatrixXd &Xin, MatrixXd &Yin){
 
 // precomputations
 void gaussian_process::init(const alglib::real_1d_array x, double observation_noise, bool noise_free){
-    //    std::chrono::time_point<std::chrono::system_clock> start,end;
-    //    std::chrono::duration<double> secs;
     kernel->parameters = alglib::real_1d_array(x);
     kernel->observation_noise = observation_noise;
 
     int n = X.cols();
     // kernel matrix ( !noise_free => K= K_noise_free + sigma_n*I
-    //    start = std::chrono::system_clock::now();
     K = kernel_matrix(X,noise_free);
-    //    end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"K: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
+    // Cholesky decomposition of K
     llt_of_K = LLT<MatrixXd,Lower>(K);
-    //    end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"llt of K: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
+
+    // K^-1
+    // using the LLT to find the inverse
+    // THIS IS TOO COSTLY, NEED AN APPROXIMATION 
     if ( Kinv.cols() < n){
         Kinv = MatrixXd::Zero(n,n);
     } else {
         Kinv.setZero();
     }
-    
     static Ref<MatrixXd> tmp = Kinv;
     static const LLT<MatrixXd,Lower>& llt_of_tmp = llt_of_K;
 #pragma omp parallel shared(tmp,llt_of_tmp)
@@ -49,21 +48,20 @@ void gaussian_process::init(const alglib::real_1d_array x, double observation_no
             tmp.col(i) = llt_of_tmp.solve(tmp.col(i));
         }
     }
-    //    end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"Kinv: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
     //Kinv = llt_of_K.solve(MatrixXd::Identity(n,n));
-    //    end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"Kinv: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
+
+    // K^-1*y
     KinvY = llt_of_K.solve(Y);
-    //    end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"KinvY: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
-    //log_det_K = 0;
+
+    // precomputing parts of the likelihood functions
     float logdetk = 0;
-    //#pragma omp parallel for reduction(+:logdetk) num_threads(omp_get_num_procs()) schedule(static)
+//#pragma omp parallel for reduction(+:logdetk) num_threads(omp_get_num_procs()) schedule(static)
     for (int i =0; i < n ; i++){
         //log_det_K +=  std::log((llt_of_K.matrixL())(i,i));
         logdetk +=  std::log((llt_of_K.matrixL())(i,i));
     }
     //log_det_K = 2*log_det_K;
     log_det_K = 2*logdetk;
-    //    end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"logdetk: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
     normalization_const = 0.5*n*std::log(2*PI);
 }
 
@@ -143,7 +141,7 @@ MatrixXd gaussian_process::kernel_matrix(MatrixXd &X, bool noise_free){
     static int n = X.cols();
     K.setZero(n,n);
 
-#pragma omp parallel for num_threads(omp_get_num_procs()) schedule(guided)
+//#pragma omp parallel for num_threads(omp_get_num_procs()) schedule(guided)
     for (int j=0; j<n ; j++){
         VectorXd x_j = X.col(j);
         for (int i=j; i<n ; i++){
@@ -244,7 +242,8 @@ void gaussian_process::optimize_parameters(double stopping_criterion, int solver
     double epsg = stopping_criterion;
     double epsf = 0;
     double epsx = 0;
-    static alglib::ae_int_t maxits = 50;
+    static alglib::ae_int_t maxits = 25;
+    alglib::setnworkers(-1);
     try{
         if (solver == ALGLIB_SOLVER_LBFGS){
             if (debug_print)

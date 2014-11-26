@@ -12,7 +12,7 @@ std::random_device rd;
 std::mt19937 gen(rd());
 
 
-double step_size = 0.05;
+double step_size = 0.1;
 double noise = 1.0;
 int n_train = 500;
 int optimization_algorithm = 0;
@@ -57,8 +57,8 @@ int main(int argc, char* argv[])
 
     std::vector<data_point> f;
     // this is our data
-    for (double x0 = -20; x0<20; x0=x0+step_size){
-      for (double x1 = -20; x1<20; x1=x1+step_size){
+    for (double x0 = -10; x0<10; x0=x0+step_size){
+      for (double x1 = -10; x1<10; x1=x1+step_size){
           VectorXd xp(2);
           xp(0)=x0; xp(1)=x1;
           f.push_back(data_point(xp,func(x0,x1,noise)));
@@ -98,7 +98,6 @@ int main(int argc, char* argv[])
     end = std::chrono::system_clock::now();
 
     secs = end - start;
-    std::cout<<"Took "<< secs.count()<<" seconds."<<std::endl;
 
     // compare actual values with prediction
     double variance;
@@ -130,4 +129,6 @@ int main(int argc, char* argv[])
              <<",\tf(x): "<<func(xp[0], xp[1])
              <<",\tf*(x): "<<mean
              <<",\tstd(x): "<<std::sqrt(variance)<<std::endl;
+
+    std::cout<<"Took "<< secs.count()<<" seconds."<<std::endl;
 }

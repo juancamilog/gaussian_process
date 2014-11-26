@@ -10,15 +10,22 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 SET(CMAKE_BUILD_TYPE Release)
 #SET(CMAKE_BUILD_TYPE Debug)
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -std=gnu++0x")
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=corei7 -mtune=generic -fopenmp")
+#SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native -mtune=native -fopenmp")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=corei7 -mtune=corei7 -fopenmp")
+
+ADD_DEFINITIONS(-DAE_CPU=AE_INTEL)
+IF (UNIX)
+    message("Running on UNIX")
+    ADD_DEFINITIONS(-DAE_OS=AE_POSIX)
+ENDIF()
 
 # set openmp flags
 FIND_PACKAGE( OpenMP REQUIRED)
-if(OPENMP_FOUND)
+IF(OPENMP_FOUND)
     message("OPENMP FOUND")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-endif()
+ENDIF()
 
 #find_package(Eigen3 REQUIRED)
 
