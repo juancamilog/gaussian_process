@@ -389,8 +389,8 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
 
     // gradient of log likelihood
     std::function<gradient_func> se_gradient = [this](const alglib::real_1d_array &params, double &func, alglib::real_1d_array &grad, void *ptr){
-        //        std::chrono::time_point<std::chrono::system_clock> start,end;
-        //        std::chrono::duration<double> secs;
+//        std::chrono::time_point<std::chrono::system_clock> start,end;
+//        std::chrono::duration<double> secs;
 
         static int d = this->X.rows();
         static int n = this->X.cols();
@@ -402,25 +402,25 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
         double minus_half_sigma_f_sq = (-0.5*params(0)*params(0));
         //double exp_ij;
         //VectorXd x_i,x_j;
-        //        start = std::chrono::system_clock::now();
+//        start = std::chrono::system_clock::now();
         // update K and Kinv
         this->init(params, params(d+1));
-        //        end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"init: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
+//      end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"init: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
         this->kernel->iters++;
         //compute negative log likelihood
         func = -this->log_marginal_likelihood();
-        //        end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"lml: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
+//        end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"lml: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
 
         //check if this is the best set of parameters we have obtained so far
         if (!std::isinf(func) && func<=-1.0*this->kernel->best_log_l){
             this->kernel->best_parameters = alglib::real_1d_array(params);
             this->kernel->best_log_l = -1.0*func;
         }
-        //        end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"updatebest: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
+//        end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"updatebest: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
 
         // compute (-(K^{-1}*y)*(K^{-1}*y)^T- K^{-1})^{T}
         MatrixXd  K_a = (this->KinvY*(this->KinvY.transpose()) - this->Kinv);
-        //        end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"Ka: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
+//        end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"Ka: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
 
         // here we are computing the (negative) partial derivatives as
         //                         -1/2*trace{ ( (K^{-1}*y)*(K^{-1}*y)^T- K^{-1} )*dK/d_param ) }
@@ -472,7 +472,7 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
                 grad(i)+=-0.5*tmp(i);
             }
         }
-        //        end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"grad: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
+//        end = std::chrono::system_clock::now(); secs = end - start; std::cout<<"grad: "<<secs.count()<<" secs."<<std::endl; start = std::chrono::system_clock::now();
     };
 
     kernel = new kernel_object(se_kernel, se_gradient, se_func);
