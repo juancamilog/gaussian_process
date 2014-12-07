@@ -29,6 +29,7 @@ void gaussian_process::init(const alglib::real_1d_array x, double observation_no
     K = kernel_matrix(X,noise_free);
     // Cholesky decomposition of K
     llt_of_K = LLT<MatrixXd,Lower>(K);
+    MatrixXd L = llt_of_K.matrixL();
 
     // K^-1
     // using the LLT to find the inverse
@@ -38,8 +39,8 @@ void gaussian_process::init(const alglib::real_1d_array x, double observation_no
     } else {
         Kinv.setZero();
     }
-    static Ref<MatrixXd> tmp = Kinv;
-    static const LLT<MatrixXd,Lower>& llt_of_tmp = llt_of_K;
+    Ref<MatrixXd> tmp = Kinv;
+    const LLT<MatrixXd,Lower>& llt_of_tmp = llt_of_K;
 #pragma omp parallel shared(tmp,llt_of_tmp)
     {
 #pragma omp for schedule (static)
@@ -72,16 +73,14 @@ void gaussian_process::init(const alglib::real_1d_array x){
 
 void gaussian_process::add_sample(VectorXd &x, double value){
     if (X.cols()==0){
-        X = x;
-        Y = VectorXd(1);
-        Y[0]= value;
+        X.conservativeResize(x.rows(),X.cols()+1);
     }
     else{
         X.conservativeResize(X.rows(),X.cols()+1);
-        X.col(X.cols()-1) = x;
-        Y.conservativeResize(Y.size()+1);
-        Y(Y.size()-1) = value;
     }
+    X.col(X.cols()-1) = x;
+    Y.conservativeResize(Y.size()+1);
+    Y(Y.size()-1) = value;
     // update the likelihood of the dataset given the best parameters found so far
     kernel->best_log_l = log_marginal_likelihood();
     init(kernel->parameters);
@@ -103,7 +102,6 @@ void gaussian_process::predictive_error_and_variance(VectorXd &error, VectorXd &
 
     error.conservativeResize(n);
     variance.conservativeResize(n);
-    std::cout<<"n: "<<n<<std::endl;
     // compute the GP prediction with the full dataset. If the noise is 0, the error and the variance should be 0
     if (type == 0){
         VectorXd mean;
@@ -126,7 +124,7 @@ void gaussian_process::predictive_error_and_variance(VectorXd &error, VectorXd &
 
 // compute the covariance vector between a sample point x, and the samples in the dataset X
 VectorXd gaussian_process::kernel_vector(VectorXd &x){
-    static int n = X.cols();
+    int n = X.cols();
     VectorXd kx = VectorXd(n);
     //#pragma omp parallel for num_threads(omp_get_num_procs()) schedule(static)
     for(int i=0; i<n; i++){
@@ -138,7 +136,7 @@ VectorXd gaussian_process::kernel_vector(VectorXd &x){
 
 // computes the covariance matrix between the samples in the dataset
 MatrixXd gaussian_process::kernel_matrix(MatrixXd &X, bool noise_free){
-    static int n = X.cols();
+    int n = X.cols();
     K.setZero(n,n);
 
 //#pragma omp parallel for num_threads(omp_get_num_procs()) schedule(guided)
@@ -189,7 +187,7 @@ double gaussian_process::log_marginal_likelihood(){
 
 double gaussian_process::leave_one_out_log_probability(){
     double loo_log_probability = 0;
-    static int n = X.cols();
+    int n = X.cols();
     double mean_i;
     double variance_i;
 
@@ -206,7 +204,7 @@ double gaussian_process::leave_one_out_log_probability(){
 
 //select random staring point
 void gaussian_process::set_opt_starting_point(VectorXd point){
-    static int d = kernel->parameters.length();
+    int d = kernel->parameters.length();
     for(int i=0; i<d; i++){ 
         kernel->parameters[i] = point[i];
     }
@@ -242,7 +240,7 @@ void gaussian_process::optimize_parameters(double stopping_criterion, int solver
     double epsg = stopping_criterion;
     double epsf = 0;
     double epsx = 0;
-    static alglib::ae_int_t maxits = 25;
+    alglib::ae_int_t maxits = 50;
     alglib::setnworkers(-1);
     try{
         if (solver == ALGLIB_SOLVER_LBFGS){
@@ -329,7 +327,7 @@ void gaussian_process::optimize_parameters(double stopping_criterion, int solver
 }
 
 void gaussian_process::optimize_parameters_random_restarts(double stopping_criterion, int solver, int restarts, double scale){
-    static int param_d = kernel->parameters.length();
+    int param_d = kernel->parameters.length();
 
     for(int i=0; i<restarts;i++){
         // set starting point
@@ -365,7 +363,7 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
     // kernel function for evaluations
     std::function<kernel_func> se_kernel = [this](VectorXd x_i, VectorXd &x_j, const alglib::real_1d_array &parameters){
         //TODO receive distance function as parameter
-        static int d = x_i.size();
+        int d = x_i.size();
         double dist=0;
         for (int i=0; i<d; i++){
             //dist += (x_i[i]-x_j[i])*(x_i[i]-x_j[i])*std::fabs(parameters(i+1));
@@ -376,7 +374,7 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
 
     // gradient of log likelihood
     std::function<kernel_func_alglib> se_func= [this](const alglib::real_1d_array &params, double &func, void *ptr){
-        static int d = this->X.rows();
+        int d = this->X.rows();
         // update K and Kinv
         this->init(params, params(d+1));
         this->kernel->iters++;
@@ -392,9 +390,9 @@ void gaussian_process::set_SE_kernel(int input_dimensions){
 //        std::chrono::time_point<std::chrono::system_clock> start,end;
 //        std::chrono::duration<double> secs;
 
-        static int d = this->X.rows();
-        static int n = this->X.cols();
-        static int param_d = params.length();
+        int d = this->X.rows();
+        int n = this->X.cols();
+        int param_d = params.length();
         double two_sigma_f = 2.0*std::fabs(params(0));
         double sigma_n_sq = params(d+1)*params(d+1);
         double two_sigma_n = 2.0*std::fabs(params(d+1));
